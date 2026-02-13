@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Brain Builder</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell" id="app"></div>
+
+  <script type="module">
+    import { getState, persistState, initState } from './app.js';
+    import { exportState, importState } from './storage.js';
+    import { globalStreak, perfectDayStreak, todayProgress, topicStreak, topicDoneToday } from './streaks.js';
+    import { computeMastery } from './mastery.js';
+    import { el, uid, showModal, masteryRing, TOPIC_COLORS } from './ui.js';
+
+    const app = document.getElementById('app');
+
+    function render() {
+      app.innerHTML = '';
+      const state = getState();
+
+      // Header
+      const header = el('div', { className: 'app-header' });
+      header.appendChild(el('h1', { html: 'Brain<span>Builder</span>' }));
+      const actions = el('div', { className: 'header-actions' });
+      actions.appendChild(el('button', { className: 'btn btn-sm', text: 'Export', onClick: () => exportState(state) }));
+      actions.appendChild(el('button', { className: 'btn btn-sm', text: 'Import', onClick: handleImport }));
+      header.appendChild(actions);
+      app.appendChild(header);
+
+      // Summary Cards
+      const gStreak = globalStreak(state.progress);
+      const pStreak = perfectDayStreak(state.topics, state.progress);
+      const tp = todayProgress(state.topics, state.progress);
+      const pct = tp.total > 0 ? Math.round((tp.done / tp.total) * 100) : 0;
+
+      const row = el('div', { className: 'card-row' });
+
+      const globalCard = el('div', { className: 'card stat-card' });
+      globalCard.appendChild(el('div', { className: 'stat-value', text: String(gStreak) }));
+      globalCard.appendChild(el('div', { className: 'stat-label', text: 'Global Streak' }));
+      row.appendChild(globalCard);
+
+      const perfectCard = el('div', { className: 'card stat-card' });
+      perfectCard.appendChild(el('div', { className: 'stat-value', text: String(pStreak) }));
+      perfectCard.appendChild(el('div', { className: 'stat-label', text: 'Perfect Days' }));
+      row.appendChild(perfectCard);
+
+      const todayCard = el('div', { className: 'card stat-card' });
+      todayCard.appendChild(el('div', { className: 'stat-value', text: `${tp.done}/${tp.total}` }));
+      todayCard.appendChild(el('div', { className: 'stat-label', text: 'Today\'s Progress' }));
+      const track = el('div', { className: 'progress-bar-track' });
+      const fill = el('div', { className: `progress-bar-fill${pct === 100 && tp.total > 0 ? ' perfect' : ''}` });
+      fill.style.width = pct + '%';
+      track.appendChild(fill);
+      todayCard.appendChild(track);
+      row.appendChild(todayCard);
+
+      app.appendChild(row);
+
+      // Topics section header
+      const sectionHeader = el('div', {
+        style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '28px' }
+      });
+      sectionHeader.appendChild(el('div', { className: 'section-title', text: 'Topics', style: { margin: '0' } }));
+      sectionHeader.appendChild(el('button', { className: 'btn btn-primary btn-sm', text: '+ Add Topic', onClick: showAddTopic }));
+      app.appendChild(sectionHeader);
+
+      // Sort: not-done first, then lowest mastery, then least recent
+      const sorted = [...state.topics].sort((a, b) => {
+        const aDone = topicDoneToday(state.progress, a.id) ? 1 : 0;
+        const bDone = topicDoneToday(state.progress, b.id) ? 1 : 0;
+        if (aDone !== bDone) return aDone - bDone;
+
+        const aM = computeMastery(state.progress, a.id);
+        const bM = computeMastery(state.progress, b.id);
+        if (aM !== bM) return aM - bM;
+
+        const aLast = lastPractice(state.progress, a.id);
+        const bLast = lastPractice(state.progress, b.id);
+        return aLast.localeCompare(bLast);
+      });
+
+      if (sorted.length === 0) {
+        app.appendChild(el('div', { className: 'empty-state', children: [
+          el('p', { text: 'No topics yet. Add one to get started.' })
+        ]}));
+        return;
+      }
+
+      const list = el('div', { className: 'topic-list' });
+
+      for (const topic of sorted) {
+        const mastery = computeMastery(state.progress, topic.id);
+        const streak = topicStreak(state.progress, topic.id);
+        const done = topicDoneToday(state.progress, topic.id);
+
+        // Use a real <a> tag wrapping the card for proper navigation
+        const link = el('a', {
+          className: `card topic-card${topic.active ? '' : ' paused'}`,
+          attrs: { href: `topic.html?topicId=${encodeURIComponent(topic.id)}` },
+          style: { textDecoration: 'none', color: 'inherit' }
+        });
+
+        link.appendChild(el('div', { className: 'topic-color-bar', style: { backgroundColor: topic.color } }));
+
+        const info = el('div', { className: 'topic-info' });
+        info.appendChild(el('div', { className: 'topic-name', text: topic.name }));
+
+        const meta = el('div', { className: 'topic-meta' });
+        if (streak > 0) meta.appendChild(el('span', { className: 'streak-badge', text: `${streak}d` }));
+        if (done) meta.appendChild(el('span', { className: 'done-badge', text: 'Done' }));
+        if (!topic.active) meta.appendChild(el('span', { text: 'Paused', style: { color: 'var(--text-muted)', fontStyle: 'italic' } }));
+        info.appendChild(meta);
+        link.appendChild(info);
+
+        const acts = el('div', { className: 'topic-actions' });
+        acts.appendChild(masteryRing(mastery));
+
+        if (topic.cards.length > 0) {
+          const drillLink = el('a', {
+            className: 'btn btn-sm',
+            text: 'Drill',
+            attrs: { href: `drill.html?topicId=${encodeURIComponent(topic.id)}` },
+            onClick: e => e.stopPropagation()
+          });
+          acts.appendChild(drillLink);
+        }
+
+        link.appendChild(acts);
+        list.appendChild(link);
+      }
+
+      app.appendChild(list);
+    }
+
+    function lastPractice(progress, topicId) {
+      const sessions = progress[topicId]?.sessions || [];
+      if (sessions.length === 0) return '0000-00-00';
+      return sessions[sessions.length - 1].date;
+    }
+
+    function showAddTopic() {
+      const content = el('div');
+      let close;
+
+      const nameGroup = el('div', { className: 'form-group' });
+      nameGroup.appendChild(el('label', { text: 'Topic Name' }));
+      const nameInput = el('input', { attrs: { type: 'text', placeholder: 'e.g. Finance, SQL, History' } });
+      nameGroup.appendChild(nameInput);
+      content.appendChild(nameGroup);
+
+      const colorGroup = el('div', { className: 'form-group' });
+      colorGroup.appendChild(el('label', { text: 'Color' }));
+      const colorRow = el('div', { className: 'color-picker-row' });
+      let selectedColor = TOPIC_COLORS[0];
+
+      TOPIC_COLORS.forEach((c, i) => {
+        const swatch = el('div', {
+          className: `color-swatch${i === 0 ? ' selected' : ''}`,
+          style: { backgroundColor: c },
+          onClick: () => {
+            colorRow.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+            swatch.classList.add('selected');
+            selectedColor = c;
+          }
+        });
+        colorRow.appendChild(swatch);
+      });
+
+      colorGroup.appendChild(colorRow);
+      content.appendChild(colorGroup);
+
+      const actions = el('div', { className: 'form-actions' });
+      actions.appendChild(el('button', { className: 'btn', text: 'Cancel', onClick: () => close() }));
+      actions.appendChild(el('button', {
+        className: 'btn btn-primary',
+        text: 'Create',
+        onClick: () => {
+          const name = nameInput.value.trim();
+          if (!name) { nameInput.focus(); return; }
+          const state = getState();
+          state.topics.push({
+            id: uid(),
+            name,
+            color: selectedColor,
+            active: true,
+            createdAt: new Date().toISOString(),
+            cards: [],
+            notes: [],
+          });
+          persistState();
+          close();
+          render();
+        }
+      }));
+      content.appendChild(actions);
+
+      const modal = showModal('New Topic', content);
+      close = modal.close;
+      requestAnimationFrame(() => nameInput.focus());
+    }
+
+    function handleImport() {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json';
+      input.addEventListener('change', async () => {
+        if (!input.files.length) return;
+        try {
+          await importState(input.files[0]);
+          window.location.reload();
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+      input.click();
+    }
+
+    // Load local cache instantly, then sync from cloud and re-render
+    initState(() => render());
+  </script>
+</body>
+</html>

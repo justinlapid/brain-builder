@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Topic — Brain Builder</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell" id="app"></div>
+
+  <script type="module">
+    import { getState, persistState, getParam, findTopic, initState } from './app.js';
+    import { topicStreak } from './streaks.js';
+    import { computeMastery } from './mastery.js';
+    import { el, uid, showModal, confirmDialog, masteryRing } from './ui.js';
+
+    const app = document.getElementById('app');
+    const topicId = getParam('topicId');
+    let activeTab = 'cards';
+
+    function render() {
+      app.innerHTML = '';
+      const state = getState();
+      const topic = findTopic(topicId);
+
+      if (!topic) {
+        app.appendChild(el('div', { className: 'empty-state', children: [
+          el('p', { text: 'Topic not found.' }),
+          el('a', { className: 'btn', text: 'Back to Home', attrs: { href: 'index.html' } })
+        ]}));
+        return;
+      }
+
+      // Back link
+      app.appendChild(el('a', { className: 'back-link', html: '&larr; Home', attrs: { href: 'index.html' } }));
+
+      // Topic header
+      const header = el('div', { className: 'topic-header' });
+      header.appendChild(el('div', { className: 'topic-color-dot', style: { backgroundColor: topic.color } }));
+
+      const info = el('div', { className: 'topic-header-info' });
+      info.appendChild(el('h2', { text: topic.name }));
+
+      const mastery = computeMastery(state.progress, topic.id);
+      const streak = topicStreak(state.progress, topic.id);
+
+      const meta = el('div', { className: 'topic-header-meta' });
+      meta.appendChild(el('span', { text: `Mastery ${mastery}%` }));
+      if (streak > 0) meta.appendChild(el('span', { className: 'streak-badge', text: `${streak}d streak` }));
+      if (!topic.active) meta.appendChild(el('span', { text: 'Paused', style: { color: 'var(--text-muted)' } }));
+      info.appendChild(meta);
+
+      header.appendChild(info);
+      header.appendChild(masteryRing(mastery));
+      app.appendChild(header);
+
+      // Controls
+      const controls = el('div', { className: 'topic-controls' });
+
+      if (topic.cards.length > 0) {
+        controls.appendChild(el('a', {
+          className: 'btn btn-primary btn-sm',
+          text: 'Start Drill',
+          attrs: { href: `drill.html?topicId=${encodeURIComponent(topic.id)}` }
+        }));
+      }
+
+      controls.appendChild(el('button', {
+        className: 'btn btn-sm',
+        text: topic.active ? 'Pause Topic' : 'Resume Topic',
+        onClick: () => { topic.active = !topic.active; persistState(); render(); }
+      }));
+
+      controls.appendChild(el('button', {
+        className: 'btn btn-danger btn-sm',
+        text: 'Delete',
+        onClick: async () => {
+          const confirmed = await confirmDialog(`Delete "${topic.name}" and all its flashcards, notes, and progress? This cannot be undone.`);
+          if (confirmed) {
+            state.topics = state.topics.filter(t => t.id !== topic.id);
+            delete state.progress[topic.id];
+            persistState();
+            window.location.href = 'index.html';
+          }
+        }
+      }));
+
+      app.appendChild(controls);
+
+      // Tabs
+      const tabs = el('div', { className: 'tabs' });
+      tabs.appendChild(el('button', {
+        className: `tab${activeTab === 'cards' ? ' active' : ''}`,
+        text: `Cards (${topic.cards.length})`,
+        onClick: () => { activeTab = 'cards'; render(); }
+      }));
+      tabs.appendChild(el('button', {
+        className: `tab${activeTab === 'notes' ? ' active' : ''}`,
+        text: `Notes (${topic.notes.length})`,
+        onClick: () => { activeTab = 'notes'; render(); }
+      }));
+      app.appendChild(tabs);
+
+      if (activeTab === 'cards') renderCards(topic);
+      else renderNotes(topic);
+    }
+
+    function renderCards(topic) {
+      app.appendChild(el('button', { className: 'btn btn-sm', text: '+ Add Card', onClick: () => showAddCard(topic) }));
+
+      if (topic.cards.length === 0) {
+        app.appendChild(el('div', { className: 'empty-state', children: [
+          el('p', { text: 'No flashcards yet. Add some to start drilling.' })
+        ]}));
+        return;
+      }
+
+      const list = el('div', { style: { marginTop: '12px' } });
+      for (const card of topic.cards) {
+        const item = el('div', { className: 'card-item' });
+        const content = el('div', { className: 'card-item-content' });
+        content.appendChild(el('div', { className: 'card-item-front', text: card.front }));
+        content.appendChild(el('div', { className: 'card-item-back', text: card.back }));
+        item.appendChild(content);
+        item.appendChild(el('button', {
+          className: 'btn btn-ghost btn-sm', text: 'x',
+          onClick: () => { topic.cards = topic.cards.filter(c => c.id !== card.id); persistState(); render(); }
+        }));
+        list.appendChild(item);
+      }
+      app.appendChild(list);
+    }
+
+    function renderNotes(topic) {
+      app.appendChild(el('button', { className: 'btn btn-sm', text: '+ Add Note', onClick: () => showAddNote(topic) }));
+
+      if (topic.notes.length === 0) {
+        app.appendChild(el('div', { className: 'empty-state', children: [
+          el('p', { text: 'No notes yet.' })
+        ]}));
+        return;
+      }
+
+      const list = el('div', { style: { marginTop: '12px' } });
+      for (const note of topic.notes) {
+        const item = el('div', { className: 'note-item' });
+        item.appendChild(el('div', { className: 'note-text', text: note.text }));
+        item.appendChild(el('button', {
+          className: 'btn btn-ghost btn-sm', text: 'x',
+          onClick: () => { topic.notes = topic.notes.filter(n => n.id !== note.id); persistState(); render(); }
+        }));
+        list.appendChild(item);
+      }
+      app.appendChild(list);
+    }
+
+    function showAddCard(topic) {
+      const content = el('div');
+      let close;
+
+      const frontGroup = el('div', { className: 'form-group' });
+      frontGroup.appendChild(el('label', { text: 'Front (question/prompt)' }));
+      const frontInput = el('input', { attrs: { type: 'text', placeholder: 'What is NPV?' } });
+      frontGroup.appendChild(frontInput);
+      content.appendChild(frontGroup);
+
+      const backGroup = el('div', { className: 'form-group' });
+      backGroup.appendChild(el('label', { text: 'Back (answer)' }));
+      const backInput = el('textarea', { attrs: { placeholder: 'Net Present Value — the sum of discounted future cash flows...' } });
+      backGroup.appendChild(backInput);
+      content.appendChild(backGroup);
+
+      const actions = el('div', { className: 'form-actions' });
+      actions.appendChild(el('button', { className: 'btn', text: 'Cancel', onClick: () => close() }));
+      actions.appendChild(el('button', {
+        className: 'btn btn-primary',
+        text: 'Add Card',
+        onClick: () => {
+          const front = frontInput.value.trim();
+          const back = backInput.value.trim();
+          if (!front || !back) { (front ? backInput : frontInput).focus(); return; }
+          topic.cards.push({ id: uid(), front, back, createdAt: new Date().toISOString() });
+          persistState();
+          close();
+          render();
+        }
+      }));
+      content.appendChild(actions);
+
+      const modal = showModal('New Flashcard', content);
+      close = modal.close;
+      requestAnimationFrame(() => frontInput.focus());
+    }
+
+    function showAddNote(topic) {
+      const content = el('div');
+      let close;
+
+      const textGroup = el('div', { className: 'form-group' });
+      textGroup.appendChild(el('label', { text: 'Note' }));
+      const textInput = el('textarea', { attrs: { placeholder: 'Key concept, formula, reminder...' } });
+      textGroup.appendChild(textInput);
+      content.appendChild(textGroup);
+
+      const actions = el('div', { className: 'form-actions' });
+      actions.appendChild(el('button', { className: 'btn', text: 'Cancel', onClick: () => close() }));
+      actions.appendChild(el('button', {
+        className: 'btn btn-primary',
+        text: 'Add Note',
+        onClick: () => {
+          const text = textInput.value.trim();
+          if (!text) { textInput.focus(); return; }
+          topic.notes.push({ id: uid(), text, createdAt: new Date().toISOString() });
+          persistState();
+          close();
+          render();
+        }
+      }));
+      content.appendChild(actions);
+
+      const modal = showModal('New Note', content);
+      close = modal.close;
+      requestAnimationFrame(() => textInput.focus());
+    }
+
+    initState(() => render());
+  </script>
+</body>
+</html>

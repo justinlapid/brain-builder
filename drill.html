@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Drill — Brain Builder</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell" id="app"></div>
+
+  <script type="module">
+    import { getState, persistState, getParam, findTopic, initState } from './app.js';
+    import { createDrill } from './drills.js';
+    import { todayStr } from './streaks.js';
+    import { el, formatTime } from './ui.js';
+
+    const app = document.getElementById('app');
+    const topicId = getParam('topicId');
+    let drill = null;
+    let timerInterval = null;
+    let confidence = null;
+
+    function init() {
+      const topic = findTopic(topicId);
+      if (!topic || topic.cards.length === 0) {
+        app.innerHTML = '';
+        app.appendChild(el('div', { className: 'empty-state', children: [
+          el('p', { text: topic ? 'This topic has no flashcards yet.' : 'Topic not found.' }),
+          el('a', { className: 'btn', text: 'Back to Home', attrs: { href: 'index.html' } })
+        ]}));
+        return;
+      }
+
+      drill = createDrill(topic.cards);
+      renderCard();
+      startTimer();
+    }
+
+    function startTimer() {
+      clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        const timerEl = document.getElementById('drill-timer');
+        if (timerEl && drill) timerEl.textContent = formatTime(drill.durationSec());
+      }, 1000);
+    }
+
+    function renderCard() {
+      app.innerHTML = '';
+      if (!drill) return;
+
+      const topic = findTopic(topicId);
+      const card = drill.currentCard();
+
+      // Header with exit link and topic name
+      const header = el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' } });
+      header.appendChild(el('a', {
+        className: 'back-link',
+        html: '&larr; Exit',
+        attrs: { href: `topic.html?topicId=${encodeURIComponent(topicId)}` },
+        style: { margin: '0' }
+      }));
+      header.appendChild(el('span', { style: { fontSize: '0.85rem', color: 'var(--text-secondary)' }, text: topic.name }));
+      app.appendChild(header);
+
+      const container = el('div', { className: 'drill-container fade-in' });
+
+      // Progress counter
+      container.appendChild(el('div', { className: 'drill-progress-header', text: `${drill.current + 1} / ${drill.total}` }));
+
+      // Flashcard
+      const drillCard = el('div', { className: `drill-card${drill.revealed ? ' revealed' : ''}` });
+
+      if (!drill.revealed) {
+        drillCard.appendChild(el('div', { className: 'drill-label', text: 'Front' }));
+        drillCard.appendChild(el('div', { className: 'drill-text', text: card.front }));
+        drillCard.appendChild(el('div', { className: 'drill-actions', children: [
+          el('button', { className: 'btn btn-primary', text: 'Reveal', onClick: () => { drill.reveal(); renderCard(); } })
+        ]}));
+      } else {
+        drillCard.appendChild(el('div', { className: 'drill-label', text: 'Back' }));
+        drillCard.appendChild(el('div', { className: 'drill-text', text: card.back }));
+        drillCard.appendChild(el('div', { className: 'drill-actions', children: [
+          el('button', { className: 'btn btn-correct', text: 'Got it', onClick: () => { drill.answer(true); next(); } }),
+          el('button', { className: 'btn btn-incorrect', text: 'Missed', onClick: () => { drill.answer(false); next(); } })
+        ]}));
+      }
+
+      container.appendChild(drillCard);
+      container.appendChild(el('div', { className: 'drill-timer', attrs: { id: 'drill-timer' }, text: formatTime(drill.durationSec()) }));
+      app.appendChild(container);
+    }
+
+    function next() {
+      if (drill.finished) {
+        clearInterval(timerInterval);
+        renderResults();
+      } else {
+        renderCard();
+      }
+    }
+
+    function renderResults() {
+      app.innerHTML = '';
+
+      const container = el('div', { className: 'drill-container fade-in' });
+      const results = el('div', { className: 'drill-results' });
+
+      results.appendChild(el('div', { className: 'drill-score', text: `${drill.scorePct()}%` }));
+      results.appendChild(el('div', { className: 'drill-score-label', text: `${drill.correct}/${drill.total} correct in ${drill.durationFormatted()}` }));
+
+      // Confidence picker
+      results.appendChild(el('div', { className: 'section-title', text: 'How confident do you feel?', style: { textAlign: 'center' } }));
+
+      const picker = el('div', { className: 'confidence-picker' });
+      for (let i = 1; i <= 5; i++) {
+        picker.appendChild(el('button', {
+          className: `confidence-btn${confidence === i ? ' selected' : ''}`,
+          text: String(i),
+          onClick: () => { confidence = i; renderResults(); }
+        }));
+      }
+      results.appendChild(picker);
+
+      const saveBtn = el('button', {
+        className: 'btn btn-primary',
+        text: 'Save & Finish',
+        onClick: () => { if (confidence) saveSession(); }
+      });
+      if (!confidence) {
+        saveBtn.setAttribute('disabled', 'true');
+        saveBtn.style.opacity = '0.4';
+        saveBtn.style.cursor = 'not-allowed';
+      }
+      results.appendChild(saveBtn);
+
+      container.appendChild(results);
+      app.appendChild(container);
+    }
+
+    function saveSession() {
+      const state = getState();
+      if (!state.progress[topicId]) {
+        state.progress[topicId] = { sessions: [] };
+      }
+
+      state.progress[topicId].sessions.push({
+        date: todayStr(),
+        scorePct: drill.scorePct(),
+        confidence,
+        durationSec: drill.durationSec(),
+        finishedAt: new Date().toISOString(),
+      });
+
+      persistState();
+      renderDone();
+    }
+
+    function renderDone() {
+      app.innerHTML = '';
+      const topic = findTopic(topicId);
+
+      const container = el('div', { className: 'drill-container fade-in' });
+      const inner = el('div', { className: 'drill-results' });
+
+      inner.appendChild(el('div', { className: 'drill-score', text: 'Done' }));
+      inner.appendChild(el('div', { className: 'drill-score-label', text: `${topic.name} — session saved` }));
+
+      const actions = el('div', { style: { display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '20px' } });
+      actions.appendChild(el('a', { className: 'btn', text: 'Home', attrs: { href: 'index.html' } }));
+      actions.appendChild(el('a', { className: 'btn', text: 'Topic', attrs: { href: `topic.html?topicId=${encodeURIComponent(topicId)}` } }));
+      actions.appendChild(el('button', {
+        className: 'btn btn-primary',
+        text: 'Drill Again',
+        onClick: () => { confidence = null; init(); }
+      }));
+      inner.appendChild(actions);
+
+      container.appendChild(inner);
+      app.appendChild(container);
+    }
+
+    // Load cloud state before starting drill (only inits once)
+    let started = false;
+    initState(() => {
+      if (!started) { started = true; init(); }
+    });
+  </script>
+</body>
+</html>
