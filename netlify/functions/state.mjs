@@ -4,7 +4,7 @@ const STORE_NAME = "brainbuilder";
 const BLOB_KEY = "state";
 
 // Simple passphrase — change this to something only you know
-const PASSPHRASE = "bb-sync-2026";
+const PASSPHRASE = "123";
 
 export default async (req) => {
   // Check passphrase
