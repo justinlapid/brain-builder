@@ -1,0 +1,23 @@
+{
+  "name": "brain-builder",
+  "version": "1.0.0",
+  "description": "A lightweight app to gamify learning across multiple topics with streaks, mastery tracking, and flashcard drills. Data syncs across all your devices via Netlify Blobs.",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/justinlapid/brain-builder.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/justinlapid/brain-builder/issues"
+  },
+  "homepage": "https://github.com/justinlapid/brain-builder#readme",
+  "dependencies": {
+    "@netlify/blobs": "^10.6.0"
+  }
+}
