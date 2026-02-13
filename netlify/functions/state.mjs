@@ -3,18 +3,7 @@ import { getStore } from "@netlify/blobs";
 const STORE_NAME = "brainbuilder";
 const BLOB_KEY = "state";
 
-// Simple passphrase — change this to something only you know
-const PASSPHRASE = "123";
-
 export default async (req) => {
-  // Check passphrase
-  const auth = req.headers.get("x-bb-auth");
-  if (auth !== PASSPHRASE) {
-    return new Response(JSON.stringify({ error: "unauthorized" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
 
   const store = getStore(STORE_NAME);
 
