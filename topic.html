@@ -48,7 +48,6 @@
       const meta = el('div', { className: 'topic-header-meta' });
       meta.appendChild(el('span', { text: `Mastery ${mastery}%` }));
       if (streak > 0) meta.appendChild(el('span', { className: 'streak-badge', text: `${streak}d streak` }));
-      if (!topic.active) meta.appendChild(el('span', { text: 'Paused', style: { color: 'var(--text-muted)' } }));
       info.appendChild(meta);
 
       header.appendChild(info);
@@ -65,12 +64,6 @@
           attrs: { href: `drill.html?topicId=${encodeURIComponent(topic.id)}` }
         }));
       }
-
-      controls.appendChild(el('button', {
-        className: 'btn btn-sm',
-        text: topic.active ? 'Pause Topic' : 'Resume Topic',
-        onClick: () => { topic.active = !topic.active; persistState(); render(); }
-      }));
 
       controls.appendChild(el('button', {
         className: 'btn btn-danger btn-sm',

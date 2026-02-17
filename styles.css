@@ -202,8 +202,6 @@ a:hover { text-decoration: underline; }
   cursor: pointer;
 }
 
-.topic-card.paused { opacity: 0.5; }
-
 .topic-color-bar {
   width: 5px;
   height: 36px;

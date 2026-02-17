@@ -78,22 +78,19 @@ export function topicDoneToday(progress, topicId) {
 
 /** Count how many active topics are done today */
 export function todayProgress(topics, progress) {
-  const active = topics.filter(t => t.active);
-  const done = active.filter(t => topicDoneToday(progress, t.id));
-  return { done: done.length, total: active.length };
+  const done = topics.filter(t => topicDoneToday(progress, t.id));
+  return { done: done.length, total: topics.length };
 }
 
 /** Check if a date is a "Perfect Day" (all active topics done) */
 export function isPerfectDay(topics, progress, date) {
-  const active = topics.filter(t => t.active);
-  if (active.length === 0) return false;
-  return active.every(t => topicDoneOnDate(progress, t.id, date));
+  if (topics.length === 0) return false;
+  return topics.every(t => topicDoneOnDate(progress, t.id, date));
 }
 
 /** Perfect Day streak: consecutive perfect days */
 export function perfectDayStreak(topics, progress) {
-  const active = topics.filter(t => t.active);
-  if (active.length === 0) return 0;
+  if (topics.length === 0) return 0;
 
   const today = todayStr();
   const yesterday = daysAgoStr(1);

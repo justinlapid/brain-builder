@@ -98,9 +98,8 @@
         const streak = topicStreak(state.progress, topic.id);
         const done = topicDoneToday(state.progress, topic.id);
 
-        // Use a real <a> tag wrapping the card for proper navigation
         const link = el('a', {
-          className: `card topic-card${topic.active ? '' : ' paused'}`,
+          className: 'card topic-card',
           attrs: { href: `topic.html?topicId=${encodeURIComponent(topic.id)}` },
           style: { textDecoration: 'none', color: 'inherit' }
         });
@@ -113,7 +112,6 @@
         const meta = el('div', { className: 'topic-meta' });
         if (streak > 0) meta.appendChild(el('span', { className: 'streak-badge', text: `${streak}d` }));
         if (done) meta.appendChild(el('span', { className: 'done-badge', text: 'Done' }));
-        if (!topic.active) meta.appendChild(el('span', { text: 'Paused', style: { color: 'var(--text-muted)', fontStyle: 'italic' } }));
         info.appendChild(meta);
         link.appendChild(info);
 
@@ -187,7 +185,6 @@
             id: uid(),
             name,
             color: selectedColor,
-            active: true,
             createdAt: new Date().toISOString(),
             cards: [],
             notes: [],
